@@ -1,10 +1,11 @@
+import einops
 import torch
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedParameter
 from torch import nn
 from kingdon import MultiVector
 
-from .utils import EPS, free_constants, norm
+from .utils import EPS, grade_of_blades, materialize_constants, norm
 
 
 class NormalizationLayer(LazyModuleMixin, nn.Module):
@@ -23,16 +24,21 @@ class NormalizationLayer(LazyModuleMixin, nn.Module):
             return
 
         with torch.no_grad():
-            self.grade_index = {g: i for i, g in enumerate(input.grades)}
-            self.a.materialize((len(self.grade_index), input.shape[-1]))
+            input = materialize_constants(input)
+            self.grades = input.grades
+            self.register_buffer("blade_grades", grade_of_blades(input))
+            self.a.materialize((len(self.grades), input.shape[-1]))
             self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.constant_(self.a, self.init)
 
     def forward(self, input: MultiVector) -> MultiVector:
-        input = free_constants(input)
+        input = materialize_constants(input)
         s_a = torch.sigmoid(self.a)
-        # Interpolate between 1 and the norm of each grade.
-        norms = {g: s_a[i] * (norm(input.grade(g)) - 1) + 1 for g, i in self.grade_index.items()}
-        return input.map(lambda k, v: v / (norms[k.bit_count()] + EPS))
+        # Interpolate between 1 and the norm of each grade. A null blade has no norm to speak of,
+        # so the entries need broadcasting against each other before they can be stacked.
+        norms = [s_a[i] * (norm(input.grade(g)) - 1) + 1 for i, g in enumerate(self.grades)]
+        norms = torch.stack(torch.broadcast_tensors(*norms))
+        scale = input.algebra.multivector(1 / (norms[self.blade_grades] + EPS), keys=input.keys())
+        return einops.einsum(input, scale, "..., ... -> ...")

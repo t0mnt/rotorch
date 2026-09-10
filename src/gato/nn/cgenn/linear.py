@@ -7,7 +7,7 @@ from torch.nn.parameter import UninitializedParameter
 from torch import nn
 from kingdon import MultiVector
 
-from .utils import free_constants
+from .utils import grade_of_blades, materialize_constants
 
 def gradewise_linear(X: MultiVector, weights: MultiVector[None]) -> MultiVector:
     """
@@ -40,10 +40,11 @@ class MVLinear(LazyModuleMixin, nn.Module):
             return
 
         with torch.no_grad():
-            # Without subspaces every grade shares one matrix.
-            self.grade_index = {g: i if self.subspaces else 0 for i, g in enumerate(input.grades)}
-            n_weights = 1 + max(self.grade_index.values())
-            self.weight.materialize((n_weights, self.out_features, self.in_features))
+            blade_grades = grade_of_blades(materialize_constants(input))
+            if not self.subspaces:  # Without subspaces every grade shares one matrix.
+                blade_grades = torch.zeros_like(blade_grades)
+            self.register_buffer("blade_grades", blade_grades)
+            self.weight.materialize((1 + int(blade_grades.max()), self.out_features, self.in_features))
             if self.bias is not None:
                 self.bias.materialize((self.out_features,))
             self.reset_parameters()
@@ -54,9 +55,10 @@ class MVLinear(LazyModuleMixin, nn.Module):
             nn.init.zeros_(self.bias)
 
     def forward(self, input: MultiVector) -> MultiVector:
-        input = free_constants(input)
-        result = input.map(lambda k, v: einops.einsum(
-            v, self.weight[self.grade_index[k.bit_count()]], "... i, o i -> ... o"))
+        input = materialize_constants(input)
+        # A multivector holding the matrix of each blade, rather than the matrix of each grade.
+        weight = input.algebra.multivector(self.weight[self.blade_grades], keys=input.keys())
+        result = einops.einsum(input, weight, "... i, o i -> ... o")
         if self.bias is not None:
             result = result + input.algebra.scalar(e=self.bias)
         return result

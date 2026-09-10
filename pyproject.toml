@@ -3,6 +3,10 @@ name = "gato"
 version = "0.0.1"
 dependencies = ["torch", "kingdon", "einops"]
 
+[project.optional-dependencies]
+docs = ["sphinx"]
+examples = ["scipy"]
+
 [build-system]
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"

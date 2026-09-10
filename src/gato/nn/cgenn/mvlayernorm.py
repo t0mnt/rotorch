@@ -5,7 +5,7 @@ from torch.nn.parameter import UninitializedParameter
 from torch import nn
 from kingdon import MultiVector
 
-from .utils import EPS, free_constants, norm
+from .utils import EPS, materialize_constants, norm
 
 
 class MVLayerNorm(LazyModuleMixin, nn.Module):
@@ -30,6 +30,7 @@ class MVLayerNorm(LazyModuleMixin, nn.Module):
         nn.init.ones_(self.a)
 
     def forward(self, input: MultiVector) -> MultiVector:
-        input = free_constants(input)
+        input = materialize_constants(input)
         norms = einops.reduce(norm(input), "... f -> ... 1", "mean") + EPS
-        return input.map(lambda v: self.a * v / norms)
+        scale = input.algebra.scalar(e=self.a / norms)  # A scalar multiplies every blade.
+        return einops.einsum(input, scale, "..., ... -> ...")

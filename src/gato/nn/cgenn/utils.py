@@ -1,9 +1,10 @@
+import torch
 from kingdon import MultiVector
 
 EPS = 1e-6
 
 
-def free_constants(mv: MultiVector) -> MultiVector:
+def materialize_constants(mv: MultiVector) -> MultiVector:
     """
     Turn the structural constants of a fixed layout, e.g. the scalar 1.0 of a
     Translation, into values, since only those are visible to `MultiVector.map`.
@@ -11,6 +12,16 @@ def free_constants(mv: MultiVector) -> MultiVector:
     if any(v is not ... for v in mv.type_layout.values()):
         return mv.asmvtype()
     return mv
+
+
+def grade_of_blades(mv: MultiVector) -> torch.Tensor:
+    """
+    For every blade of `mv`, the index of its grade among the grades present. Lets a layer hold
+    one parameter per grade and still apply them to the coefficients in one go, rather than a
+    blade at a time.
+    """
+    index = {g: i for i, g in enumerate(mv.grades)}
+    return torch.tensor([index[k.bit_count()] for k in mv.keys()])
 
 
 def register(algebra, expr):

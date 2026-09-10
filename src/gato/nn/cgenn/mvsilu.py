@@ -1,10 +1,11 @@
+import einops
 import torch
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedParameter
 from torch import nn
 from kingdon import MultiVector
 
-from .utils import free_constants, mag2, norm
+from .utils import grade_of_blades, materialize_constants, mag2, norm
 
 
 class MVSiLU(LazyModuleMixin, nn.Module):
@@ -28,9 +29,11 @@ class MVSiLU(LazyModuleMixin, nn.Module):
             return
 
         with torch.no_grad():
-            self.grade_index = {g: i for i, g in enumerate(input.grades)}
-            self.a.materialize((len(self.grade_index), input.shape[-1]))
-            self.b.materialize((len(self.grade_index), input.shape[-1]))
+            input = materialize_constants(input)
+            self.grades = input.grades
+            self.register_buffer("blade_grades", grade_of_blades(input))
+            self.a.materialize((len(self.grades), input.shape[-1]))
+            self.b.materialize((len(self.grades), input.shape[-1]))
             self.reset_parameters()
 
     def reset_parameters(self):
@@ -38,9 +41,9 @@ class MVSiLU(LazyModuleMixin, nn.Module):
         nn.init.zeros_(self.b)
 
     def forward(self, input: MultiVector) -> MultiVector:
-        input = free_constants(input)
-        gates = {}
-        for g, i in self.grade_index.items():
-            invariant = input.e if g == 0 else self.invariant(input.grade(g))
-            gates[g] = torch.sigmoid(self.a[i] * invariant + self.b[i])
-        return input.map(lambda k, v: gates[k.bit_count()] * v)
+        input = materialize_constants(input)
+        gates = [torch.sigmoid(self.a[i] * (input.e if g == 0 else self.invariant(input.grade(g))) + self.b[i])
+                 for i, g in enumerate(self.grades)]
+        gates = torch.stack(torch.broadcast_tensors(*gates))
+        gates = input.algebra.multivector(gates[self.blade_grades], keys=input.keys())
+        return einops.einsum(input, gates, "..., ... -> ...")
