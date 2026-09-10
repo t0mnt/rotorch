@@ -36,7 +36,7 @@ class NormalizationLayer(LazyModuleMixin, nn.Module):
     def forward(self, input: MultiVector) -> MultiVector:
         input = materialize_constants(input)
         s_a = torch.sigmoid(self.a)
-        # Interpolate between 1 and the norm of each grade. A null blade has no norm to speak of,
+        # Interpolate between 1 and the norm of each grade. A null grade has no norm to speak of,
         # so the entries need broadcasting against each other before they can be stacked.
         norms = [s_a[i] * (norm(input.grade(g)) - 1) + 1 for i, g in enumerate(self.grades)]
         norms = torch.stack(torch.broadcast_tensors(*norms))

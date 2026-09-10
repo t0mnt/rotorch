@@ -9,7 +9,7 @@ from .utils import EPS, materialize_constants, norm
 
 
 class MVLayerNorm(LazyModuleMixin, nn.Module):
-    """Divide by the norm of the input, averaged over the channels."""
+    """Divide by the norm of the input averaged over the channels, times a learned scale."""
 
     a: UninitializedParameter
 

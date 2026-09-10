@@ -7,7 +7,7 @@ EPS = 1e-6
 def materialize_constants(mv: MultiVector) -> MultiVector:
     """
     Turn the structural constants of a fixed layout, e.g. the scalar 1.0 of a
-    Translation, into values, since only those are visible to `MultiVector.map`.
+    Translation, into values, since only those take part in the arithmetic.
     """
     if any(v is not ... for v in mv.type_layout.values()):
         return mv.asmvtype()
@@ -16,22 +16,22 @@ def materialize_constants(mv: MultiVector) -> MultiVector:
 
 def grade_of_blades(mv: MultiVector) -> torch.Tensor:
     """
-    For every blade of `mv`, the index of its grade among the grades present. Lets a layer hold
-    one parameter per grade and still apply them to the coefficients in one go, rather than a
-    blade at a time.
+    For every blade of `mv`, the index of its grade among the grades present, so that a layer
+    can hold one parameter per grade and still apply them all in one go.
     """
     index = {g: i for i, g in enumerate(mv.grades)}
     return torch.tensor([index[k.bit_count()] for k in mv.keys()])
 
 
-def register(algebra, expr):
+def register(algebra, expr, **kwargs):
     """
     Compile `expr` for `algebra`, or hand back the operator registered under its name
     before, since registering anew would drop the codegen cached on it. The name of
-    `expr` therefore has to be unique within `algebra.registry`.
+    `expr` therefore has to be unique within `algebra.registry`. Any keyword arguments
+    are passed on to :meth:`~kingdon.algebra.Algebra.add_operator`.
     """
     if expr.__name__ not in algebra.registry:
-        algebra.add_operator(expr, symbolic=True)
+        algebra.add_operator(expr, symbolic=True, **kwargs)
     return algebra.registry[expr.__name__]
 
 

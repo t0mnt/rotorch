@@ -9,10 +9,7 @@ from .utils import grade_of_blades, materialize_constants, mag2, norm
 
 
 class MVSiLU(LazyModuleMixin, nn.Module):
-    """
-    Gate every grade with a sigmoid of an invariant of that grade. Because the gate is
-    invariant, the gated multivector transforms just like the input.
-    """
+    """Gate every grade by a sigmoid of an invariant of it, which the group cannot see."""
 
     a: UninitializedParameter
     b: UninitializedParameter
