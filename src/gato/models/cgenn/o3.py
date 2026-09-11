@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 from kingdon import MultiVector
 
@@ -12,8 +11,7 @@ class O3CGMLP(nn.Module):
                  normalization_init=0):
         super().__init__()
 
-        product = lambda i, o: FullyConnectedGeometricProduct(
-            i, o, normalization_init=normalization_init)
+        product = lambda i, o: FullyConnectedGeometricProduct(i, o, normalization_init=normalization_init)
         self.net = nn.Sequential(
             product(in_features, hidden_features),
             # As in cgenn, the nonlinearities are stacked without products in between.
@@ -21,5 +19,5 @@ class O3CGMLP(nn.Module):
             product(hidden_features, out_features),
         )
 
-    def forward(self, input: MultiVector) -> torch.Tensor:
-        return self.net(input).e123[..., 0]
+    def forward(self, input: MultiVector) -> MultiVector:
+        return self.net(input).grade(input.algebra.d)

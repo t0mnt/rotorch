@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 from kingdon import MultiVector
 
@@ -13,7 +12,7 @@ class O5CGMLP(nn.Module):
         super().__init__()
 
         self.gp = nn.Sequential(
-            MVLinear(in_features, hidden_features, subspaces=False),
+            MVLinear(in_features, hidden_features, gradewise=False),
             GeometricProduct(hidden_features, normalization_init=normalization_init),
         )
         self.mlp = nn.Sequential(
@@ -24,5 +23,5 @@ class O5CGMLP(nn.Module):
             nn.Linear(mlp_features, out_features),
         )
 
-    def forward(self, input: MultiVector) -> torch.Tensor:
-        return self.mlp(self.gp(input).e)
+    def forward(self, input: MultiVector) -> MultiVector:
+        return input.algebra.scalar(e=self.mlp(self.gp(input).e))

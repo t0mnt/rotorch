@@ -9,7 +9,7 @@ def seed():
 
 @pytest.fixture
 def alg():
-    return Algebra(3, 0, 1, backends=['torch'], extra_types=[EvenMV])
+    return Algebra(3, 0, 1, backends=['torch'])
 
 @pytest.fixture
 def alg3():
@@ -37,12 +37,3 @@ def assert_equivariant():
         diff = layer(rotor >> a) - (rotor >> out)
         assert all(v.abs().max() < tol for v in diff.values())
     return assert_equivariant
-
-@pytest.fixture
-def assert_invariant():
-    def assert_invariant(model, rotor, a):
-        """Assert that f(w >> x) == f(x), to within a few hundred ulps."""
-        out = model(a)
-        tol = 256 * torch.finfo(out.dtype).eps * out.abs().max()
-        assert (model(rotor >> a) - out).abs().max() < tol
-    return assert_invariant

@@ -19,16 +19,16 @@ def gradewise_linear(X: MultiVector, weights: MultiVector[None]) -> MultiVector:
     return tot
 
 class MVLinear(LazyModuleMixin, nn.Module):
-    """Linear map that gives every grade its own mixing matrix, unless subspaces is False."""
+    """Linear map that gives every grade its own mixing matrix, unless gradewise is False."""
 
     weight: UninitializedParameter
     bias: UninitializedParameter
 
-    def __init__(self, in_features, out_features, subspaces=True, bias=True):
+    def __init__(self, in_features, out_features, gradewise=True, bias=True):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.subspaces = subspaces
+        self.gradewise = gradewise
         self.weight = UninitializedParameter()
         if bias:
             self.bias = UninitializedParameter()
@@ -41,7 +41,7 @@ class MVLinear(LazyModuleMixin, nn.Module):
 
         with torch.no_grad():
             blade_grades = grade_of_blades(materialize_constants(input))
-            if not self.subspaces:  # Without subspaces every grade shares one matrix.
+            if not self.gradewise:  # Without gradewise every grade shares one matrix.
                 blade_grades = torch.zeros_like(blade_grades)
             self.register_buffer("blade_grades", blade_grades)
             self.weight.materialize((1 + int(blade_grades.max()), self.out_features, self.in_features))

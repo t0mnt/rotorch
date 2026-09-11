@@ -6,7 +6,7 @@ dependencies = ["torch", "kingdon", "einops"]
 [project.optional-dependencies]
 docs = ["sphinx", "furo", "myst-parser"]
 test = ["pytest"]
-examples = ["scipy"]
+examples = ["scipy", "e3nn"]
 
 [build-system]
 requires = ["setuptools>=64"]

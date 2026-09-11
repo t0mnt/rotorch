@@ -84,7 +84,7 @@ class NBodyCGGNN(nn.Module):
                  n_layers=3, normalization_init=0, residual=True):
         super().__init__()
 
-        self.embedding = MVLinear(in_features, hidden_features, subspaces=False)
+        self.embedding = MVLinear(in_features, hidden_features, gradewise=False)
         self.layers = nn.ModuleList(
             EGCL(hidden_features, hidden_features, hidden_features, edge_features_in,
                  residual=residual, normalization_init=normalization_init)
@@ -96,4 +96,4 @@ class NBodyCGGNN(nn.Module):
         h = self.embedding(h)
         for layer in self.layers:
             h = layer(h, edges, edge_attr=edge_attr)
-        return self.projection(h)
+        return self.projection(h).grade(1)

@@ -1,8 +1,8 @@
-import torch
 from torch import nn
 from kingdon import MultiVector
 
 from ...nn.cgenn import GeometricProduct, MVLinear
+from ...nn.cgenn.utils import register, scalar_normsq
 
 
 class ConvexHullCGMLP(nn.Module):
@@ -13,7 +13,7 @@ class ConvexHullCGMLP(nn.Module):
         super().__init__()
 
         self.net = nn.Sequential(
-            MVLinear(in_features, hidden_features, subspaces=False),
+            MVLinear(in_features, hidden_features, gradewise=False),
             *(GeometricProduct(hidden_features, normalization_init=normalization_init)
               for _ in range(num_layers)),
         )
@@ -23,7 +23,6 @@ class ConvexHullCGMLP(nn.Module):
             nn.Linear(hidden_features, out_features),
         )
 
-    def forward(self, input: MultiVector) -> torch.Tensor:
-        y = self.net(input)
-        y = sum(v ** 2 for v in y.values()).sqrt()  # Euclidean blade norm, invariant under the group.
-        return self.mlp(y).squeeze(-1)
+    def forward(self, input: MultiVector) -> MultiVector:
+        input_normsq = register(input.algebra, scalar_normsq)(self.net(input))
+        return self.mlp(input_normsq.sqrt())
