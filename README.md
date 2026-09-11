@@ -54,12 +54,14 @@ class ConvexHullCGMLP(nn.Module):
 
 alg = Algebra(5, backends=['torch'])
 points = torch.rand(5, 8, 16)
-input = alg.vector(points)  # Vector[(8, 16)]
+x = alg.vector(points)     # Vector[(8, 16)]
 
 model = ConvexHullCGMLP()
-output = model(input)       # Scalar[(8, 1)]
+y = model(x)               # Scalar[(8, 1)]
 ```
 
+A big advantage of `gato` is that the models can be formulated without reference to a specific algebra,
+since the algebra comes from the multivectors. (`x` in the example above.)
 
 ## Roadmap
 - [x] Full compatibility with existing torch modules. This is something the competition does *not* have, because they represent multivectors with shape `(..., channels_in, blades)` where blades is $2^n$. In `kingdon` v3 however, a multivector has shape `(..., channels_in)` and the blade dimension is invisible. (Under the hood the underlying datastructure is `(blades, ..., channels_in)` where moreover blades does not have to be the full algebra, which is where we will get our speed-up from.) The torch modules expect the channels to be the last dimension, which kingdon has!
