@@ -1,7 +1,22 @@
+import einops
+import kingdon.einops_backend  # noqa: F401  Registers MultiVector with einops.
 import torch
 from kingdon import MultiVector
 
 EPS = 1e-6
+
+
+def cat(mvs: list[MultiVector]) -> MultiVector:
+    """Concatenate multivectors along their feature axis."""
+    packed, _ = einops.pack([mv.asmvtype() for mv in mvs], "n *")
+    return packed
+
+
+def segment_mean(X: MultiVector, segment_ids: torch.Tensor, num_segments: int) -> MultiVector:
+    """Average the multivectors that share a segment id, over the axis the ids index."""
+    counts = segment_ids.new_zeros(num_segments).index_add_(0, segment_ids, torch.ones_like(segment_ids))
+    counts = einops.rearrange(counts.clamp(min=1), "segment -> segment 1")
+    return X.map(lambda v: v.new_zeros(num_segments, *v.shape[1:]).index_add_(0, segment_ids, v) / counts)
 
 
 def materialize_constants(mv: MultiVector) -> MultiVector:
@@ -48,3 +63,13 @@ def mag2(X: MultiVector):
 def norm(X: MultiVector):
     """Magnitude of the single grade multivector X, smoothed to stay differentiable at zero."""
     return (mag2(X) ** 2 + 1e-16) ** 0.25
+
+
+def invariants(X: MultiVector) -> MultiVector:
+    """
+    One invariant per grade of X, laid out feature by feature: the scalar part as it is, and the
+    squared magnitude of every other grade, neither of which the group can see.
+    """
+    X = materialize_constants(X)
+    per_grade = torch.broadcast_tensors(*(X.e if g == 0 else mag2(X.grade(g)) for g in X.grades))
+    return X.algebra.scalar(e=einops.rearrange(torch.stack(per_grade), "grade ... feature -> ... (feature grade)"))

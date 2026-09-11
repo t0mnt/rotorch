@@ -1,26 +1,8 @@
-import einops
-import kingdon.einops_backend  # noqa: F401  Registers MultiVector with einops.
-import torch
 from torch import nn
 from kingdon import MultiVector
 
 from ...nn.cgenn import GeometricProduct, MVLayerNorm, MVLinear, MVSiLU
-
-
-def cat(mvs: list[MultiVector]) -> MultiVector:
-    """Concatenate multivectors along their feature axis."""
-    packed, _ = einops.pack([mv.asmvtype() for mv in mvs], "n *")
-    return packed
-
-
-def unsorted_segment_mean(data, segment_ids, num_segments):
-    result_shape = (num_segments, data.size(1))
-    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
-    result = data.new_full(result_shape, 0)
-    count = data.new_full(result_shape, 0)
-    result.scatter_add_(0, segment_ids, data)
-    count.scatter_add_(0, segment_ids, torch.ones_like(data))
-    return result / count.clamp(min=1)
+from ...nn.cgenn.utils import cat, segment_mean
 
 
 class CEMLP(nn.Module):
@@ -63,7 +45,7 @@ class EGCL(nn.Module):
         return self.edge_model(input)
 
     def aggregate(self, h_msg, segment_ids, num_segments):
-        return h_msg.map(lambda v: unsorted_segment_mean(v, segment_ids, num_segments))
+        return segment_mean(h_msg, segment_ids, num_segments)
 
     def update(self, h_agg, h, node_attr=None):
         input = [h, h_agg] if node_attr is None else [h, h_agg, node_attr]

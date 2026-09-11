@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 import benchmark
-from gato.models.cgenn.nbody import cat
+from gato.nn.cgenn.utils import cat
 
 N_BODIES, DIM = 5, 3
 DT, SETTLE, SPAN = 0.001, 1000, 1000

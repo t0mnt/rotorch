@@ -1,5 +1,6 @@
 import torch
-from gato.models.cgenn import ConvexHullCGMLP, NBodyCGGNN, O3CGMLP, O5CGMLP
+from gato.models.cgenn import ConvexHullCGMLP, LorentzCGGNN, NBodyCGGNN, O3CGMLP, O5CGMLP
+from gato.nn.cgenn.utils import cat
 
 
 def test_hulls(alg5, rotor, assert_equivariant):
@@ -31,3 +32,22 @@ def test_nbody(alg3, rotor, assert_equivariant):
     b = model(h, edges, edge_attr)
     assert b.shape == (5, 1) and b.keys() == (1, 2, 4)
     assert_equivariant(lambda x: model(x, edges, edge_attr), rotor(alg3), h)
+
+def test_lorentz(sta, rotor, assert_equivariant, double):
+    jets, nodes = 2, 4
+    p = sta.vector(torch.randn(4, jets * nodes, 1))
+    h = sta.scalar(e=torch.randn(jets * nodes, 2))
+    pairs = [(i, j) for i in range(nodes) for j in range(nodes) if i != j]
+    rows, cols = torch.tensor([(i + nodes * n, j + nodes * n) for n in range(jets) for i, j in pairs]).T
+    model = LorentzCGGNN(features_x=4, features_h=8, decoder_features=8, n_layers=2, dropout=0.0)
+
+    def forward(x):
+        """The jets, the scalars that go with them, and every edge labelled with its endpoints."""
+        edge_attr_x = cat([x[rows] - x[cols], x[rows], x[cols]])
+        return model(h, x, (rows, cols), h, x, edge_attr_x, nodes)
+
+    b = forward(p)
+    assert b.shape == (jets, 2) and b.keys() == (0,)
+    # A boost stretches the momenta tens of times over before the products square them, which
+    # leaves fewer digits than a rotation would, and none worth checking in single precision.
+    assert_equivariant(forward, rotor(sta), p, ulps=2 ** 20)

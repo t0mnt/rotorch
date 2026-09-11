@@ -77,7 +77,8 @@ tensor and whose keys are static context, and because nothing in the path raises
 traces to **one graph with no breaks**, and :code:`fullgraph=True` succeeds and reproduces
 the eager loss and gradients exactly. cgenn cannot be compiled that strictly, since it
 indexes its weights with a boolean mask, whose result has a data dependent shape; its
-:code:`--compile model` column is therefore compiled with graph breaks.
+:code:`--compile model` column is therefore compiled with graph breaks. The lorentz model below
+traces to one graph as well, message passing, batch norms and gathers included.
 
 Which of the two wins depends on the batch size, and they cross between 128 and 512.
 Compiling the model removes almost all of the per step python and dispatch cost, which is
@@ -88,71 +89,58 @@ long to compile: 98 small graphs rather than one large one.
 Other examples
 --------------
 
-The other three examples of cgenn are set up the same way, each with its own data and model but
+The other four examples of cgenn are set up the same way, each with its own data and model but
 the same loop, so they can be compared in the same terms. Milliseconds per step at each
 example's own defaults, over 64 steps:
 
 .. list-table::
    :header-rows: 1
-   :widths: 10 20 10 10 12 10 12
+   :widths: 10 20 10 10 12
 
    * - example
-     - what it regresses
+     - what it predicts
      - cgenn
      - gato
      - gato, model
-     - e3nn
-     - e3nn, model
    * - hulls
      - the volume of a convex hull in 5D
      - 39.6
      - 29.2
      - 9.5 (4.2×)
-     -
-     -
    * - o3
      - the determinant of three vectors in 3D
      - 6.3
      - 4.0
      - 3.4 (1.9×)
-     - 1.9
-     - 0.7
    * - o5
      - an O(5) invariant of two vectors in 5D
      - 3.7
      - 2.0
      - 1.2 (3.1×)
-     -
-     -
    * - nbody
      - where five charged particles end up
      - 258.4
      - 229.8
      - 94.7 (2.7×)
-     -
-     -
+   * - lorentz
+     - which jets came from a top quark
+     - 329.7
+     - 484.2
+     - 194.0 (1.7×)
 
 Each reaches the same validation loss as cgenn does on the same data, with the parameter
 counts below. o3 gains least from compiling because its model is small enough that a step is
-mostly fixed cost either way. The nbody dataset is simulated by the example rather than read
-from the files the EGNN repository ships, so its trajectories are not the ones cgenn trains on.
+mostly fixed cost either way. The nbody and lorentz datasets are simulated by the examples rather
+than read from the files the EGNN repository and the top tagging reference set ship, so their
+trajectories and their jets are not the ones cgenn trains on.
 
-The o3 example also runs against `e3nn <https://e3nn.org>`_, which describes the same symmetry
-with irreps rather than multivectors. It is laid out like the model beside it: two bilinear
-layers with norm gated nonlinearities between them, ending on the odd scalar a determinant is.
-The second product is with the input again, since a product of two even parity irreps could
-never be odd.
-
-That column is not a like for like comparison, and it is worth being precise about why. A
-:class:`~gato.nn.cgenn.FullyConnectedGeometricProduct` is a block rather than a bilinear map: it
-bundles a first order linear term, a second linear map feeding the right operand, and a per
-grade normalization. The first of those is load bearing here, since without it the output of
-the first layer has only even grades and no pseudoscalar to read at the end; the normalization
-costs 0.60 ms of gato's 3.53 in isolation. e3nn's tensor product has none of that machinery and
-takes its parity from multiplying by the input instead, which leaves it the smaller model by
-some way: 672 parameters against 4,973, and a validation loss of 0.0170 against 0.0027 after
-256 steps. So the timings flatter e3nn and the losses flatter gato. What the two columns do
-share is the task, the data, the loop, the optimizer and the number of bilinear layers.
+lorentz is the one example where gato is slower than cgenn until it is compiled, and it is slower
+for the reason given under `Where the time goes`_. Its products are wide, mixing 27 input features
+into 8 output ones over the 2,912 edges of a batch, so every intermediate is an array of some six
+hundred thousand numbers that eager mode writes out and reads back. Its multivectors are dense
+besides: a vector in :math:`Cl(1,3)` has reached every grade by the end of the first layer, so
+from the second on there is no sparsity left to spend, only the 16× fewer multiply-adds that the
+sparse Cayley table saves. Fusing those intermediates is what turns 1.5× slower into 1.7× faster.
 
 The validation losses of gato and cgenn differ even though they train on the same data, because
 they do not start from the same place: their parameter counts differ, so the initial weights are
@@ -236,6 +224,7 @@ hulls          58,849      38,881
 o3              8,657       4,973
 o5            344,077     343,125
 nbody         134,625     126,645
+lorentz       320,594     303,525
 =========  ==========  ==========
 
 Same function, fewer parameters, a third of them in the case of hulls. Its input is a pure
@@ -249,6 +238,15 @@ that both implementations share.
 The two implementations agree to machine precision, module by module, in :math:`Cl(2)`,
 :math:`Cl(3)`, :math:`Cl(3,1)` and :math:`Cl(3,0,1)`, and every column above reaches the same
 validation loss, 21.7 to 22.7 depending on the batch size.
+
+lorentz is checked whole rather than module by module, since its layers are wired together in a
+way the others are not. Copying cgenn's weights into gato's model -- grade by grade for the
+linear maps, path by path for the products, and column by column for the plain layers that read
+invariants, since a grade cgenn allocates for and gato does not have contributes nothing -- and
+running both over the same jets leaves at most :math:`5 \cdot 10^{-13}` between their logits in
+double precision, four rounds of message passing deep. The same check in single precision leaves
+2%, which is not disagreement but cancellation: a momentum of a few hundred GeV squares to a few
+hundred thousand, and every invariant in this model is a difference of such numbers.
 
 Start-up
 --------
