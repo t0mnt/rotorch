@@ -1,6 +1,14 @@
 name: docs
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
+# A queued deploy waits for the running one rather than cancelling it, so main is never
+# left half published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build-docs:
@@ -25,3 +33,26 @@ jobs:
         pip install --upgrade ".[docs]"
         mkdir docs_build
         sphinx-build -nW -b html docs docs_build
+    - name: Upload the pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: docs_build
+
+  deploy-docs:
+    name: Deploy to GitHub Pages
+    needs: build-docs
+    # Pull requests are built but not published, and neither is any branch but main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - name: Deploy
+      id: deployment
+      uses: actions/deploy-pages@v4
