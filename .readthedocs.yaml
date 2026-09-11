@@ -8,6 +8,7 @@ build:
     python: "3.13"
   jobs:
     pre_install:
+      - pip install --upgrade pip
       # autodoc imports gato, so the build needs torch; the CPU-only index avoids the
       # multi-GB CUDA wheels that the default PyPI build pulls in.
       - pip install torch --index-url https://download.pytorch.org/whl/cpu
