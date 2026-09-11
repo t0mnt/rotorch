@@ -24,4 +24,4 @@ class O5CGMLP(nn.Module):
         )
 
     def forward(self, input: MultiVector) -> MultiVector:
-        return input.algebra.scalar(e=self.mlp(self.gp(input).e))
+        return self.mlp(self.gp(input).grade(0))

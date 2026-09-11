@@ -12,6 +12,7 @@ import numpy as np
 import torch
 
 import benchmark
+from gato.models.cgenn.nbody import cat
 
 N_BODIES, DIM = 5, 3
 DT, SETTLE, SPAN = 0.001, 1000, 1000
@@ -59,13 +60,8 @@ def embed(algebra, loc, vel, edge_attr, charges, loc_end, edges):
     rows, cols = (edges + offset).transpose(0, 1).flatten(1)
 
     # One feature per quantity: the charge is a scalar, the position and velocity are vectors.
-    zeros = torch.zeros_like(charges)
-    scalars = torch.cat([charges, zeros, zeros], dim=-1)
-    vectors = torch.stack([torch.zeros_like(centred), centred, vel], dim=-1)
-    input = algebra.multivector(torch.cat([scalars[None], vectors.transpose(0, 1)]),
-                                keys=(0, 1, 2, 4))
-
     as_vector = lambda t: algebra.vector(einops.rearrange(t, "node coord -> coord node 1"))
+    input = cat([algebra.scalar(e=charges), as_vector(centred), as_vector(vel)])
     return ((input, (rows, cols), algebra.scalar(e=flatten(edge_attr))),
             as_vector(loc), as_vector(loc_end))
 

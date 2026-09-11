@@ -13,6 +13,7 @@ from typing import Callable
 
 import numpy as np
 import torch
+from gato.nn.cgenn.utils import mag2
 from kingdon import MultiVector
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -36,9 +37,12 @@ class Task:
 
 
 def mse_loss(prediction: MultiVector, target: MultiVector) -> torch.Tensor:
-    """The mean squared error over the blades of two multivectors."""
-    difference = (prediction - target).values()
-    return torch.stack(torch.broadcast_tensors(*difference)).square().mean()
+    """
+    The mean squared distance between two multivectors. Null blades contribute nothing,
+    having no distance to speak of, so in a degenerate algebra they go unpenalized.
+    """
+    difference = prediction - target
+    return mag2(difference).mean() / len(difference.keys())
 
 
 def synchronize(device):
