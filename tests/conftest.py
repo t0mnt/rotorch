@@ -9,19 +9,19 @@ def seed():
 
 @pytest.fixture
 def alg():
-    return Algebra(3, 0, 1, backends=['torch'])
+    return Algebra(3, 0, 1, backend='torch')
 
 @pytest.fixture
 def alg3():
-    return Algebra(3, backends=['torch'])
+    return Algebra(3, backend='torch')
 
 @pytest.fixture
 def alg5():
-    return Algebra(5, backends=['torch'])
+    return Algebra(5, backend='torch')
 
 @pytest.fixture
 def sta():
-    return Algebra(1, 3, backends=['torch'])
+    return Algebra(1, 3, backend='torch')
 
 @pytest.fixture
 def double():

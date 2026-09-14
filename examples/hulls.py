@@ -35,7 +35,7 @@ def gato(args):
 
     # The wrapper is applied to every operator kingdon generates for this algebra.
     wrapper = torch.compile if args.compile == "operators" else None
-    algebra = Algebra(DIM, backends=["torch"], wrapper=wrapper)
+    algebra = Algebra(DIM, backend="torch", wrapper=wrapper)
     model = ConvexHullCGMLP(N_POINTS, args.hidden_features, num_layers=args.num_layers).to(args.device)
 
     def loss_fn(points, volumes):

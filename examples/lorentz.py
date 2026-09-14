@@ -124,7 +124,7 @@ def gato(args):
     from gato.models.cgenn import LorentzCGGNN
 
     wrapper = torch.compile if args.compile == "operators" else None
-    algebra = Algebra(1, 3, backends=["torch"], wrapper=wrapper)
+    algebra = Algebra(1, 3, backend="torch", wrapper=wrapper)
     model = LorentzCGGNN(features_x=args.hidden_features, n_layers=args.num_layers).to(args.device)
 
     def loss_fn(momenta, label):
@@ -138,7 +138,7 @@ def cgenn(args):
     from kingdon import Algebra
     from models.lorentz_cggnn import LorentzCGGNN
 
-    algebra = Algebra(1, 3, backends=["torch"])
+    algebra = Algebra(1, 3, backend="torch")
     model = LorentzCGGNN(hidden_features_x=args.hidden_features, n_layers=args.num_layers).to(args.device)
 
     def loss_fn(momenta, label):

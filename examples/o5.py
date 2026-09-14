@@ -38,7 +38,7 @@ def gato(args):
     from gato.models.cgenn import O5CGMLP
 
     wrapper = torch.compile if args.compile == "operators" else None
-    algebra = Algebra(DIM, backends=["torch"], wrapper=wrapper)
+    algebra = Algebra(DIM, backend="torch", wrapper=wrapper)
     model = O5CGMLP(N_VECTORS, args.hidden_features).to(args.device)
 
     def loss_fn(points, values):
