@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 import benchmark
-from gato.nn.cgenn.utils import cat, mag2
+from rotorch.nn.cgenn.utils import cat, mag2
 
 N_PRONGS, N_CONSTITUENTS = 3, 12
 BEAM_MASS, JET_MASS, JET_MOMENTUM, PRONG_SPREAD = 1.0, (150.0, 200.0), (400.0, 600.0), 0.1
@@ -119,9 +119,9 @@ def embed(algebra, momenta, label):
     return (h, x, (rows, cols), h, x, edge_attr_x, nodes), label
 
 
-def gato(args):
+def rotorch(args):
     from kingdon import Algebra
-    from gato.models.cgenn import LorentzCGGNN
+    from rotorch.models.cgenn import LorentzCGGNN
 
     wrapper = torch.compile if args.compile == "operators" else None
     algebra = Algebra(1, 3, backend="torch", wrapper=wrapper)
@@ -152,7 +152,7 @@ def cgenn(args):
 
 
 task = benchmark.Task(name="lorentz", generate=generate,
-                      models=dict(gato=gato, cgenn=cgenn),
+                      models=dict(rotorch=rotorch, cgenn=cgenn),
                       defaults=dict(hidden_features=8, num_layers=4, batch_size=16,
                                     train_samples=1024, val_samples=256))
 

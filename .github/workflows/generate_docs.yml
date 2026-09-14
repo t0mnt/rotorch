@@ -25,7 +25,7 @@ jobs:
         cache: pip
         cache-dependency-path: pyproject.toml
     - name: Build docs
-      # autodoc imports gato, so the docs build needs the package and its dependencies;
+      # autodoc imports rotorch, so the docs build needs the package and its dependencies;
       # the CPU-only index avoids the multi-GB CUDA torch wheels.
       run: |
         pip install --upgrade pip

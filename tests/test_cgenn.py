@@ -1,7 +1,7 @@
 from kingdon import Bireflection, EvenMV
 import torch
 import torch.nn as nn
-from gato.nn.cgenn import (GeometricProduct, FullyConnectedGeometricProduct, MVLinear,
+from rotorch.nn.cgenn import (GeometricProduct, FullyConnectedGeometricProduct, MVLinear,
                            MVLayerNorm, MVSiLU, NormalizationLayer)
 
 

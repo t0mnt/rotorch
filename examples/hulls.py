@@ -29,9 +29,9 @@ def embed(algebra, points, volumes):
             algebra.scalar(e=einops.rearrange(volumes, "batch -> batch 1")))
 
 
-def gato(args):
+def rotorch(args):
     from kingdon import Algebra
-    from gato.models.cgenn import ConvexHullCGMLP
+    from rotorch.models.cgenn import ConvexHullCGMLP
 
     # The wrapper is applied to every operator kingdon generates for this algebra.
     wrapper = torch.compile if args.compile == "operators" else None
@@ -53,7 +53,7 @@ def cgenn(args):
 
 
 task = benchmark.Task(name="hulls", generate=generate,
-                      models=dict(gato=gato, cgenn=cgenn),
+                      models=dict(rotorch=rotorch, cgenn=cgenn),
                       defaults=dict(hidden_features=32, num_layers=4))
 
 if __name__ == "__main__":

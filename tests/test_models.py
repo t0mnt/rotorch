@@ -1,6 +1,6 @@
 import torch
-from gato.models.cgenn import ConvexHullCGMLP, LorentzCGGNN, NBodyCGGNN, O3CGMLP, O5CGMLP
-from gato.nn.cgenn.utils import cat
+from rotorch.models.cgenn import ConvexHullCGMLP, LorentzCGGNN, NBodyCGGNN, O3CGMLP, O5CGMLP
+from rotorch.nn.cgenn.utils import cat
 
 
 def test_hulls(alg5, rotor, assert_equivariant):

@@ -33,9 +33,9 @@ def embed(algebra, points, values):
             algebra.scalar(e=values))
 
 
-def gato(args):
+def rotorch(args):
     from kingdon import Algebra
-    from gato.models.cgenn import O5CGMLP
+    from rotorch.models.cgenn import O5CGMLP
 
     wrapper = torch.compile if args.compile == "operators" else None
     algebra = Algebra(DIM, backend="torch", wrapper=wrapper)
@@ -57,7 +57,7 @@ def cgenn(args):
 
 
 task = benchmark.Task(name="o5", generate=generate,
-                      models=dict(gato=gato, cgenn=cgenn),
+                      models=dict(rotorch=rotorch, cgenn=cgenn),
                       defaults=dict(hidden_features=8, train_samples=1024))
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 [project]
-name = "gato"
+name = "rotorch"
 version = "0.0.1"
 dependencies = ["torch", "kingdon", "einops"]
 

@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 import benchmark
-from gato.nn.cgenn.utils import cat
+from rotorch.nn.cgenn.utils import cat
 
 N_BODIES, DIM = 5, 3
 DT, SETTLE, SPAN = 0.001, 1000, 1000
@@ -66,9 +66,9 @@ def embed(algebra, loc, vel, edge_attr, charges, loc_end, edges):
             as_vector(loc), as_vector(loc_end))
 
 
-def gato(args):
+def rotorch(args):
     from kingdon import Algebra
-    from gato.models.cgenn import NBodyCGGNN
+    from rotorch.models.cgenn import NBodyCGGNN
 
     wrapper = torch.compile if args.compile == "operators" else None
     algebra = Algebra(DIM, backend="torch", wrapper=wrapper)
@@ -93,7 +93,7 @@ def cgenn(args):
 
 
 task = benchmark.Task(name="nbody", generate=generate,
-                      models=dict(gato=gato, cgenn=cgenn),
+                      models=dict(rotorch=rotorch, cgenn=cgenn),
                       defaults=dict(hidden_features=28, num_layers=3, batch_size=100,
                                     train_samples=3000, val_samples=512))
 

@@ -1,22 +1,22 @@
 API reference
 =============
 
-Both :mod:`gato.nn` and :mod:`gato.models` are organised one subpackage per architecture.
+Both :mod:`rotorch.nn` and :mod:`rotorch.models` are organised one subpackage per architecture.
 Only cgenn is implemented so far, so everything below lives under ``cgenn``; GATr and
 others will appear alongside it rather than in place of it.
 
 Layers
 ------
 
-.. automodule:: gato.nn
+.. automodule:: rotorch.nn
 
 cgenn
 ^^^^^
 
-.. The layers are defined in submodules and re-exported from ``gato.nn.cgenn``, so
+.. The layers are defined in submodules and re-exported from ``rotorch.nn.cgenn``, so
    ``imported-members`` is what documents them under the path users actually import.
 
-.. automodule:: gato.nn.cgenn
+.. automodule:: rotorch.nn.cgenn
    :members:
    :imported-members:
    :show-inheritance:
@@ -24,12 +24,12 @@ cgenn
 Models
 ------
 
-.. automodule:: gato.models
+.. automodule:: rotorch.models
 
 cgenn
 ^^^^^
 
-.. automodule:: gato.models.cgenn
+.. automodule:: rotorch.models.cgenn
    :members:
    :imported-members:
    :show-inheritance:

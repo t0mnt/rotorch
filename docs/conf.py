@@ -1,4 +1,4 @@
-project = "gato"
+project = "rotorch"
 author = "Martin Roelfs"
 copyright = "2026, Martin Roelfs"
 

@@ -29,9 +29,9 @@ def embed(algebra, points, volumes):
             algebra.pseudoscalar(e123=einops.rearrange(volumes, "batch -> batch 1")))
 
 
-def gato(args):
+def rotorch(args):
     from kingdon import Algebra
-    from gato.models.cgenn import O3CGMLP
+    from rotorch.models.cgenn import O3CGMLP
 
     wrapper = torch.compile if args.compile == "operators" else None
     algebra = Algebra(DIM, backend="torch", wrapper=wrapper)
@@ -81,7 +81,7 @@ def cgenn(args):
 
 
 task = benchmark.Task(name="o3", generate=generate,
-                      models=dict(gato=gato, cgenn=cgenn, e3nn=e3nn),
+                      models=dict(rotorch=rotorch, cgenn=cgenn, e3nn=e3nn),
                       defaults=dict(hidden_features=32, num_layers=6))
 
 if __name__ == "__main__":

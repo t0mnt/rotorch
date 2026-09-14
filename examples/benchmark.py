@@ -13,7 +13,7 @@ from typing import Callable
 
 import numpy as np
 import torch
-from gato.nn.cgenn.utils import mag2
+from rotorch.nn.cgenn.utils import mag2
 from kingdon import MultiVector
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -146,6 +146,6 @@ def run(task):
     parser.set_defaults(**task.defaults)
     parser.set_defaults(**task.model_defaults.get(parser.parse_known_args()[0].impl, {}))
     args = parser.parse_args()
-    if args.impl != "gato" and args.compile == "operators":
-        raise SystemExit("--compile operators is about the operators kingdon generates, so gato only.")
+    if args.impl != "rotorch" and args.compile == "operators":
+        raise SystemExit("--compile operators is about the operators kingdon generates, so rotorch only.")
     train(args, task)
