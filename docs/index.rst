@@ -1,12 +1,12 @@
-rotorch (Rotors in Torch)
-=========================
+rotorch (Rotor Torch)
+=====================
 
 .. The README is the front page. Its own title is skipped, since it is the title above;
    everything after it is included as-is, so the two never drift apart.
 
 .. include:: ../README.md
    :parser: myst_parser.sphinx_
-   :start-after: # rotorch (Rotors in Torch)
+   :start-after: # rotorch (Rotor Torch)
 
 Documentation
 -------------
