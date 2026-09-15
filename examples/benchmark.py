@@ -121,6 +121,8 @@ def train(args, task):
           f"val loss {evaluate(loss_fn, val_loader, args.device):.4f}")
     print(f"  first step {times[0] * 1e3:.0f} ms, then {warm.median() * 1e3:.1f} ms/step "
           f"(mean {warm.mean() * 1e3:.1f}, total {sum(times):.1f} s)")
+    if args.device.startswith("cuda"):  # How much of the card a batch this size needs.
+        print(f"  peak memory {torch.cuda.max_memory_allocated() / 2 ** 20:.0f} MiB")
 
 
 def run(task):
