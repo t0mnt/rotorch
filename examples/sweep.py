@@ -1,6 +1,10 @@
 """
 Run one example over the whole benchmark matrix and write every result to one csv.
 
+Each run is timed and, on cuda, weighed: the peak allocation of a forward on its own and of a
+forward and backward together, so that the saving can be read as a ratio to cgenn the way
+flash-clifford and flash-kingdon report theirs.
+
 The matrix is five implementations x the batch sizes x cpu and cuda, each repeated so that the
 faster run can be kept and so that a compiled run is seen once cold and once warm:
 
@@ -41,14 +45,14 @@ CONFIGS = {
 EAGER = ("cgenn", "rotorch")
 
 FIELDS = ["timestamp", "host", "device", "config", "batch", "rep", "status", "median_ms",
-          "mean_ms", "first_step_ms", "peak_memory_mib", "total_s", "wall_s", "parameters",
-          "val_loss", "returncode", "error", "steps", "warmup", "train_samples", "example",
-          "python", "torch", "cuda", "gpu", "cpu", "platform"]
+          "mean_ms", "first_step_ms", "memory_forward_mib", "memory_step_mib", "total_s",
+          "wall_s", "parameters", "val_loss", "returncode", "error", "steps", "warmup",
+          "train_samples", "example", "python", "torch", "cuda", "gpu", "cpu", "platform"]
 
 SUMMARY = re.compile(r"first step ([\d.]+) ms, then ([\d.]+) ms/step \(mean ([\d.]+), "
                      r"total ([\d.]+) s\)")
 VAL_LOSS = re.compile(r"(\d+) parameters, val loss ([-\d.]+)")
-MEMORY = re.compile(r"peak memory (\d+) MiB")
+MEMORY = re.compile(r"memory ([\d.]+) MiB forward, ([\d.]+) MiB forward and backward")
 # Failures worth telling apart in the csv: the first two are limits of the card, the third of
 # the toolchain, and an illegal access has been known to take the whole machine with it.
 FAILURES = [("out of memory", "out-of-memory"),
@@ -114,7 +118,7 @@ def run(example, config, device, batch, rep, args, environ):
     if match := VAL_LOSS.search(output):
         row.update(parameters=match[1], val_loss=match[2])
     if match := MEMORY.search(output):
-        row.update(peak_memory_mib=match[1])
+        row.update(memory_forward_mib=match[1], memory_step_mib=match[2])
     if returncode or "median_ms" not in row:
         row.update(status="failed", error=classify(output))
         with open(f"{args.output}.{config}_{device}_b{batch}.log", "w",
@@ -154,33 +158,64 @@ def plan(args, has_cuda):
                         yield config, device, batch, rep
 
 
+def table(best, oom, device, metric, title, ratio):
+    """
+    One metric over the configurations and batch sizes of one device, each cell against the
+    cgenn cell beside it. :param ratio: how to turn the two into the figure in brackets --
+    speedup for time, so that more is better, and the ratio itself for memory, so that less is,
+    which is how flash-clifford reports it.
+    """
+    batches = sorted({key[2] for key in best if key[0] == device})
+    configs = [c for c in CONFIGS
+               if any(key[:2] == (device, c) and metric in best[key] for key in best)]
+    if not configs:
+        return
+
+    print(f"\n{device}: {title}")
+    print("batch".rjust(7) + "".join(name.rjust(22) for name in configs))
+    for batch in batches:
+        cells = []
+        for config in configs:
+            value = best.get((device, config, batch), {}).get(metric)
+            baseline = best.get((device, "cgenn", batch), {}).get(metric)
+            if value is None:
+                cells.append(("OOM" if (device, config, batch) in oom else "-").rjust(22))
+            elif baseline and config != "cgenn":
+                cells.append(f"{value:.1f} ({ratio(baseline, value):.2f}x)".rjust(22))
+            else:
+                cells.append(f"{value:.1f}".rjust(22))
+        print(str(batch).rjust(7) + "".join(cells))
+
+
 def summarize(path):
-    """The table the docs want: the faster of the reps, and the speedup over cgenn."""
-    best = {}
+    """
+    What the docs want: the faster of the reps, the speedup over cgenn, and what each of them
+    asked the card for, as flash-clifford reports it -- a forward on its own and a forward and
+    backward together, each as a ratio to cgenn, where below one is a saving.
+    """
+    best, fastest, oom = {}, {}, set()
     with open(path, encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle):
+            key = (row["device"], row["config"], int(row["batch"]))
+            if row["error"] == "out-of-memory":
+                oom.add(key)
             if row["status"] != "ok" or not row["median_ms"]:
                 continue
-            key = (row["device"], row["config"], int(row["batch"]))
-            best[key] = min(float(row["median_ms"]), best.get(key, float("inf")))
+            if float(row["median_ms"]) < fastest.get(key, float("inf")):
+                fastest[key] = float(row["median_ms"])  # Memory comes from the run we quote.
+                best[key] = {name: float(row[name]) for name in
+                             ("median_ms", "memory_forward_mib", "memory_step_mib")
+                             if row.get(name)}
 
     for device in dict.fromkeys(key[0] for key in best):
-        batches = sorted({key[2] for key in best if key[0] == device})
-        configs = [c for c in CONFIGS if any(key[:2] == (device, c) for key in best)]
-        print(f"\n{device}: ms/step, and the speedup over cgenn")
-        print("batch".rjust(7) + "".join(name.rjust(22) for name in configs))
-        for batch in batches:
-            cells = []
-            for config in configs:
-                value = best.get((device, config, batch))
-                baseline = best.get((device, "cgenn", batch))
-                if value is None:
-                    cells.append("-".rjust(22))
-                elif baseline and config != "cgenn":
-                    cells.append(f"{value:.1f} ({baseline / value:.1f}x)".rjust(22))
-                else:
-                    cells.append(f"{value:.1f}".rjust(22))
-            print(str(batch).rjust(7) + "".join(cells))
+        table(best, oom, device, "median_ms", "ms/step, and the speedup over cgenn",
+              lambda baseline, value: baseline / value)
+        table(best, oom, device, "memory_forward_mib",
+              "peak MiB of a forward, and the ratio to cgenn (below one is a saving)",
+              lambda baseline, value: value / baseline)
+        table(best, oom, device, "memory_step_mib",
+              "peak MiB of a forward and backward, and the ratio to cgenn",
+              lambda baseline, value: value / baseline)
 
 
 def main():
@@ -247,7 +282,7 @@ def main():
         if row["status"] == "ok":
             print(f"    {row['median_ms']} ms/step, first step "
                   f"{float(row['first_step_ms']) / 1000:.1f} s"
-                  + (f", peak {row['peak_memory_mib']} MiB" if row.get("peak_memory_mib")
+                  + (f", {row['memory_step_mib']} MiB" if row.get("memory_step_mib")
                      else ""), flush=True)
         else:
             print(f"    {row['error']} after {row['wall_s']} s, see "

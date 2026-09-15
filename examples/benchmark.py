@@ -8,6 +8,7 @@ import argparse
 import os
 import sys
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -51,6 +52,41 @@ def synchronize(device):
         torch.cuda.synchronize()
     elif device.startswith("mps"):
         torch.mps.synchronize()
+
+
+@contextmanager
+def measure_memory(device):
+    """
+    The peak allocation over the block, in MiB, measured as flash-clifford measures it: the
+    counter is reset first, so that what earlier steps left behind is not counted, and the work
+    is waited for, so that a queue that has not run yet cannot hide it. Zero on cpu, where torch
+    keeps no such counter.
+    """
+    peak = [0.0]
+    if not device.startswith("cuda"):
+        yield peak
+        return
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+    synchronize(device)
+    yield peak
+    synchronize(device)
+    peak[0] = torch.cuda.max_memory_allocated() / 2 ** 20
+
+
+def memory(loss_fn, batch, device):
+    """
+    What one batch costs the card: a forward on its own, holding the graph the backward would
+    need, and then a forward and backward together. Both after training, so that a compiled
+    model is measured compiled.
+    """
+    with measure_memory(device) as forward:
+        loss = loss_fn(*batch)
+    del loss  # Or its activations are still live when the next measurement starts.
+
+    with measure_memory(device) as forward_backward:
+        loss_fn(*batch).backward()
+    return forward[0], forward_backward[0]
 
 
 def dataset(task, data_dir, split, n_samples, seed):
@@ -122,7 +158,9 @@ def train(args, task):
     print(f"  first step {times[0] * 1e3:.0f} ms, then {warm.median() * 1e3:.1f} ms/step "
           f"(mean {warm.mean() * 1e3:.1f}, total {sum(times):.1f} s)")
     if args.device.startswith("cuda"):  # How much of the card a batch this size needs.
-        print(f"  peak memory {torch.cuda.max_memory_allocated() / 2 ** 20:.0f} MiB")
+        forward, forward_backward = memory(loss_fn, batch, args.device)
+        print(f"  memory {forward:.1f} MiB forward, {forward_backward:.1f} MiB "
+              f"forward and backward")
 
 
 def run(task):
