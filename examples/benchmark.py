@@ -46,6 +46,14 @@ def mse_loss(prediction: MultiVector, target: MultiVector) -> torch.Tensor:
     return mag2(difference).mean() / len(difference.keys())
 
 
+def codegen(args):
+    """Keyword arguments for :class:`Algebra`: which backend, and whether to compile."""
+    kwargs = dict(backend=args.backend)
+    if args.compile == "operators":
+        kwargs["wrapper"] = torch.compile
+    return kwargs
+
+
 def synchronize(device):
     """Both mps and cuda queue work asynchronously, so time nothing until it has landed."""
     if device.startswith("cuda"):
@@ -178,6 +186,9 @@ def run(task):
     parser.add_argument("--print-interval", type=int, default=32)
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--backend", choices=["torch", "triton"], default="torch",
+                        help="how kingdon emits its operators: one torch call per symbolic "
+                             "multiply, or one triton kernel per operator")
     parser.add_argument("--compile", choices=["none", "operators", "model"], default="none",
                         help="compile every operator kingdon generates, which hands torch.compile "
                              "to kingdon as its wrapper, or the model as a whole")
@@ -186,6 +197,7 @@ def run(task):
     parser.set_defaults(**task.defaults)
     parser.set_defaults(**task.model_defaults.get(parser.parse_known_args()[0].impl, {}))
     args = parser.parse_args()
-    if args.impl != "rotorch" and args.compile == "operators":
-        raise SystemExit("--compile operators is about the operators kingdon generates, so rotorch only.")
+    if args.impl != "rotorch" and (args.compile == "operators" or args.backend != "torch"):
+        raise SystemExit("--backend and --compile operators are about the operators kingdon "
+                         "generates, so rotorch only.")
     train(args, task)

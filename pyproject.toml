@@ -4,7 +4,7 @@ version = "0.0.1"
 dependencies = ["torch", "kingdon", "einops"]
 
 [project.optional-dependencies]
-docs = ["sphinx", "furo", "myst-parser"]
+docs = ["sphinx", "furo", "myst-parser", "sphinx-design"]
 test = ["pytest"]
 examples = ["scipy", "e3nn"]
 

@@ -8,6 +8,8 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "myst_parser",
+    # The benchmark page puts the cpu and the gpu results in one section, behind tabs.
+    "sphinx_design",
 ]
 
 # The README is included on the front page: it writes its tensor shapes as $2^n$, and

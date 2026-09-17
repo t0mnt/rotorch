@@ -3,6 +3,7 @@ Regress the volume of the convex hull of 16 points in 5D, the hulls example of c
 
     python examples/hulls.py
     python examples/hulls.py --compile model
+    python examples/hulls.py --backend triton
     python examples/hulls.py --impl cgenn [--cgenn-path /path/to/cgenn]
 """
 import einops
@@ -33,9 +34,7 @@ def rotorch(args):
     from kingdon import Algebra
     from rotorch.models.cgenn import ConvexHullCGMLP
 
-    # The wrapper is applied to every operator kingdon generates for this algebra.
-    wrapper = torch.compile if args.compile == "operators" else None
-    algebra = Algebra(DIM, backend="torch", wrapper=wrapper)
+    algebra = Algebra(DIM, **benchmark.codegen(args))
     model = ConvexHullCGMLP(N_POINTS, args.hidden_features, num_layers=args.num_layers).to(args.device)
 
     def loss_fn(points, volumes):

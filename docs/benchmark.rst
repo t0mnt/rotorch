@@ -17,7 +17,8 @@ the same data, the same schedule and the same optimizer::
 
 Timings are the median over 64 steps of forward, backward and optimizer step, after eight
 warm-up steps, and then the faster of two such runs, on an idle Apple M2 with torch 2.14 and
-python 3.12. CPU only; the CUDA numbers will follow on a machine that has one.
+python 3.12. The same matrix on a workstation, cpu and gpu side by side and weighed as well as
+timed, is under :ref:`workstation` below.
 
 Throughput
 ----------
@@ -272,12 +273,243 @@ Compiling the model needs kingdon's operator cache to be warm, since kingdon gen
 operators on the first call and dynamo cannot trace code generation. The example therefore
 runs one step eagerly before compiling.
 
+.. _workstation:
+
+On a workstation
+----------------
+
+The whole matrix again on one machine that has a card worth using: an **NVIDIA RTX A4000**
+(16 GB) beside an **AMD Zen 3** (family 25), Windows 11, torch 2.9.1 with cuda 12.8, triton 3.5
+and python 3.12. Same script, same protocol as above -- the median of 64 steps after eight
+warm-up ones, the faster of two runs -- driven by :code:`examples/sweep.py`, which also weighs
+each run: the peak allocation of a forward, and of a forward and backward together, the way
+`flash-clifford <https://github.com/tBuLi/flash-kingdon-clifford>`_ reports its memory. The
+batch size goes to 16384 on the card, where 2048 was as far as the cpu was worth taking.
+
+These are a different machine from the numbers at the top of this page, so read each device
+against itself rather than against the M2.
+
+.. tab-set::
+
+   .. tab-item:: CUDA
+      :sync: cuda
+
+      .. raw:: html
+         :file: _static/hulls-cuda-time.svg
+
+      Milliseconds per step, and the speedup over cgenn:
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 10 14 18 16 20
+
+         * - batch
+           - cgenn
+           - cgenn, compiled
+           - rotorch
+           - rotorch, operators
+         * - 32
+           - 31.1
+           - 25.4 (1.22×)
+           - 224.4 (0.14×)
+           - 33.5 (0.93×)
+         * - 128
+           - 30.8
+           - 24.7 (1.25×)
+           - 230.2 (0.13×)
+           - 33.6 (0.92×)
+         * - 512
+           - 30.6
+           - 26.3 (1.16×)
+           - 237.1 (0.13×)
+           - 38.0 (0.81×)
+         * - 2048
+           - 69.9
+           - 62.0 (1.13×)
+           - 239.0 (0.29×)
+           - 43.0 (1.63×)
+         * - 4096
+           - 128.0
+           - 113.8 (1.12×)
+           - 240.1 (0.53×)
+           - 58.4 (2.19×)
+         * - 8192
+           - 248.0
+           - 219.9 (1.13×)
+           - 268.6 (0.92×)
+           - 109.3 (2.27×)
+         * - 16384
+           - 490.5
+           - 443.5 (1.11×)
+           - 346.6 (1.42×)
+           - 202.2 (2.43×)
+
+      Every column is flat to batch 512 and rises after it, which is the same shape the cpu
+      table has; what differs is the height of the flat part and the slope after it. Three of
+      the four sit on a floor between 25 and 38 ms, near enough the same, because a step that small
+      is fixed cost whoever runs it. Eager rotorch's floor is 224 ms, seven times higher, and
+      it holds that floor all the way to 4096: a step that does not notice a hundred and
+      twenty-eight times the data, because it is not doing arithmetic, it is waiting for
+      python to launch its next kernel. Past 2048 the marginal cost takes over and sets the
+      order, and :code:`--compile operators` is the fastest column on the card from there on.
+
+      Fitting ms/step as a fixed cost plus a cost per sample, over all seven batch sizes:
+
+      ==================  ===============  =================  =======
+      run                 fixed per step   marginal           r²
+      ==================  ===============  =================  =======
+      cgenn               19.5 ms          28.4 µs / sample   0.998
+      cgenn, compiled     15.1 ms          25.8 µs / sample   0.998
+      rotorch             224.0 ms         6.9 µs / sample    0.954
+      rotorch, operators  27.6 ms          10.4 µs / sample   0.988
+      ==================  ===============  =================  =======
+
+      The marginal costs are the sparsity: 10.4 µs per sample against cgenn's 28.4, 2.7×
+      cheaper, and that is the ratio the speedup column is climbing towards as the fixed cost
+      stops mattering -- 1.6× at 2048, 2.2× at 4096, 2.4× at 16384. Eager rotorch's 6.9 µs is
+      the lowest marginal cost of the four and buys nothing, because 224 ms of launches is in
+      front of it.
+
+      .. raw:: html
+         :file: _static/hulls-cuda-memory.svg
+
+      Peak MiB of a forward and backward, and the ratio to cgenn, where below one is a saving:
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 10 14 18 16 20
+
+         * - batch
+           - cgenn
+           - cgenn, compiled
+           - rotorch
+           - rotorch, operators
+         * - 32
+           - 58.6
+           - 58.3 (0.99×)
+           - 23.4 (0.40×)
+           - 21.5 (0.37×)
+         * - 128
+           - 128.3
+           - 127.2 (0.99×)
+           - 38.1 (0.30×)
+           - 30.5 (0.24×)
+         * - 512
+           - 407.0
+           - 401.5 (0.99×)
+           - 97.0 (0.24×)
+           - 66.6 (0.16×)
+         * - 2048
+           - 1524.8
+           - 1503.4 (0.99×)
+           - 334.4 (0.22×)
+           - 213.2 (0.14×)
+         * - 4096
+           - 3010.2
+           - 2970.0 (0.99×)
+           - 646.6 (0.21×)
+           - 404.6 (0.13×)
+         * - 8192
+           - 5982.2
+           - 5901.2 (0.99×)
+           - 1275.1 (0.21×)
+           - 791.1 (0.13×)
+         * - 16384
+           - 11929.3
+           - 11755.6 (0.99×)
+           - 2518.7 (0.21×)
+           - 1550.6 (0.13×)
+
+      The memory is the cleaner result of the two, because nothing about it is a matter of
+      launch overhead: it is the same 32 blades of every intermediate that the dense einsum
+      writes down and the sparse product does not. rotorch holds a fifth of cgenn's memory
+      eager and an eighth compiled, and the ratio is settled by batch 512 and flat from there.
+      At 16384 that is 1.5 GiB against 11.9 GiB: cgenn is within four gigabytes of filling the
+      card and cannot have the next doubling at all, while rotorch is still using under a
+      tenth of it.
+
+      Compiling barely moves it either way: inductor fuses arithmetic, not activations, and an
+      activation that the backward will want has to exist whoever wrote it. A forward on its
+      own is within a percent of the figures above for the three uncompiled columns -- these
+      models keep almost everything for the backward -- and 13% under them for
+      :code:`--compile operators`, which is the only column where fusion drops an intermediate
+      the backward turns out not to need.
+
+      :code:`--compile model` has no column: it failed on this machine too, in seven seconds,
+      before compiling anything. The log stayed on that machine, so the reason is not in the
+      csv, but the timing matches the failure of the three compiled cpu runs below to the
+      second, and those are known to be a missing C++ compiler.
+
+   .. tab-item:: CPU
+      :sync: cpu
+
+      .. raw:: html
+         :file: _static/hulls-cpu-time.svg
+
+      Milliseconds per step, and the speedup over cgenn:
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 10 16 20
+
+         * - batch
+           - cgenn
+           - rotorch
+         * - 32
+           - 56.7
+           - 54.2 (1.05×)
+         * - 128
+           - 116.0
+           - 70.9 (1.64×)
+         * - 512
+           - 376.8
+           - 145.0 (2.60×)
+         * - 2048
+           - 1137.1
+           - 332.0 (3.42×)
+
+      ==================  ===============  ==================  =======
+      run                 fixed per step   marginal            r²
+      ==================  ===============  ==================  =======
+      cgenn               61.1 ms          530.2 µs / sample   0.996
+      rotorch             58.4 ms          135.5 µs / sample   0.992
+      ==================  ===============  ==================  =======
+
+      The two start level, because at batch 32 a step is fixed cost for both, and separate by
+      the marginal cost from there: 135.5 µs per sample against 530.2, 3.9× cheaper, which is
+      the same story the M2 tells at the top of this page and close to the same number. There
+      is no launch overhead on a cpu to hide it, which is why the cpu column needs no
+      compiling to show the sparsity and the cuda column does.
+
+      The three compiled configurations have no rows. Inductor writes C++ for the cpu and
+      needs a compiler for it, and :code:`cl.exe` was not on the path of the shell that ran
+      the sweep, so all three failed in about six seconds and the sweep recorded them and
+      moved on. They are the one gap in this matrix; a run from a developer prompt would fill
+      them in.
+
+Compiling costs more on the card than it does on the M2 at the small batch sizes and less at
+the large ones, and the cache matters more than the batch size does:
+
+=======================  ==================  ==================
+run                      first step, cold    first step, warm
+=======================  ==================  ==================
+cgenn                    0.3 to 1.0 s        --
+rotorch                  0.9 to 1.1 s        --
+cgenn, compiled          18 to 24 s          2.4 to 2.9 s
+rotorch, operators       12 to 397 s         10 to 14 s
+=======================  ==================  ==================
+
+The 98 operators take twelve to twenty-six seconds to compile at batch 32 and 128 and about six
+and a half minutes from 512 up, where the shapes are large enough that inductor stops taking the
+cheap path. Warm, any of them is back in under fifteen seconds. At batch 16384, where compiling
+saves 144 ms a step, that cold compile has paid for itself after about 2,700 steps, or 100 warm.
+
 Devices
 -------
 
-The example also runs on :code:`--device mps`, where kernel launch overhead dominates below a
-batch size of a few hundred and the GPU wins above it: at batch 32 rotorch takes 84.7 ms/step on
-mps against 28.8 on cpu, and at batch 2048 218.7 against 479.6. Neither :code:`--compile` mode
+Besides cuda, the example runs on :code:`--device mps`, where kernel launch overhead dominates
+below a batch size of a few hundred and the GPU wins above it: at batch 32 rotorch takes 84.7
+ms/step on mps against 28.8 on cpu, and at batch 2048 218.7 against 479.6. Neither :code:`--compile` mode
 runs there, since inductor's Metal backend cannot compile these kernels: the wide ones exceed
 Metal's limit of about 31 buffer arguments per kernel, one per blade, and the rest fail to
 build their shaders.

@@ -5,7 +5,7 @@ Each run is timed and, on cuda, weighed: the peak allocation of a forward on its
 forward and backward together, so that the saving can be read as a ratio to cgenn the way
 flash-clifford and flash-kingdon report theirs.
 
-The matrix is five implementations x the batch sizes x cpu and cuda, each repeated so that the
+The matrix is every implementation x the batch sizes x cpu and cuda, each repeated so that the
 faster run can be kept and so that a compiled run is seen once cold and once warm:
 
     python examples/sweep.py                        # everything this machine can run
@@ -18,9 +18,13 @@ is appended to as results land and is re-read on startup, so the sweep can be in
 restarted and will pick up where it left off. A configuration that fails at one batch size is
 not tried at a larger one, since these failures are failures of size.
 
-The whole thing is a few hours, most of it compiling: every batch size compiles anew, and
-:code:`--compile operators` builds 98 operators each time. :code:`--cuda-batches` and
-:code:`--cpu-batches` are the dials if that is too much, and :code:`--configs` drops columns.
+The whole thing is a few hours, most of it compiling: every batch size compiles anew.
+:code:`--cuda-batches` and :code:`--cpu-batches` are the dials if that is too much, and
+:code:`--configs` drops columns.
+
+The cgenn columns need its checkout on :code:`--cgenn-path`, plus pyyaml, scipy and
+scikit-learn, which are not rotorch's own dependencies. The triton columns need a gpu; there
+is no cpu triton, so they are skipped on :code:`--devices cpu`.
 """
 import argparse
 import csv
@@ -28,21 +32,26 @@ import json
 import os
 import platform
 import re
+import shutil
 import socket
 import subprocess
 import sys
 import time
 
 # Implementation -> the flags that select it. The order is the order of the table in the docs,
-# and also the order to run them in: the eager ones are cheap and answer most of the question.
+# and also the order to run them in: the cheap ones answer most of the question.
 CONFIGS = {
     "cgenn": ["--impl", "cgenn"],
     "rotorch": [],
+    "rotorch-triton": ["--backend", "triton"],
     "cgenn-compiled": ["--impl", "cgenn", "--compile", "model"],
     "rotorch-operators": ["--compile", "operators"],
     "rotorch-model": ["--compile", "model"],
+    "rotorch-triton-model": ["--backend", "triton", "--compile", "model"],
 }
-EAGER = ("cgenn", "rotorch")
+# Run these first. The two eager ones cost nothing to start; triton pays a compile per kernel,
+# which is seconds against the minutes inductor wants for a whole model.
+FIRST = ("cgenn", "rotorch", "rotorch-triton")
 
 FIELDS = ["timestamp", "host", "device", "config", "batch", "rep", "status", "median_ms",
           "mean_ms", "first_step_ms", "memory_forward_mib", "memory_step_mib", "total_s",
@@ -59,9 +68,17 @@ FAILURES = [("out of memory", "out-of-memory"),
             ("illegal memory access", "illegal-memory-access"),
             ("CUDA error", "cuda-error"),
             ("timed out after", "timeout"),
+            # Inductor writes c++ for the cpu and needs a compiler for it. On windows that is
+            # MSVC, which is only on the path inside a developer prompt. Triton carries the
+            # cuda side, so this is a cpu-only failure.
+            ("is not found", "no-cpp-compiler"),
             ("BackendCompilerFailed", "compile-failed"),
+            ("InductorError", "compile-failed"),
             ("Could not import the cgenn model", "cgenn-path"),
-            ("ModuleNotFoundError", "import-error")]
+            ("ModuleNotFoundError", "import-error"),
+            # A triton kernel that asks for more registers or shared memory than the card has.
+            ("OutOfResources", "triton-resources"),
+            ("PTXASError", "ptxas-failed")]
 
 
 def environment(python):
@@ -146,12 +163,12 @@ def completed(path):
 
 
 def plan(args, has_cuda):
-    """Cheap and informative first: every eager run, then the compiled ones by batch size."""
+    """Cheap and informative first, then the ones that compile for minutes, by batch size."""
     devices = args.devices or (["cpu", "cuda"] if has_cuda else ["cpu"])
     for device in devices:
         batches = args.cpu_batches if device == "cpu" else args.cuda_batches
         configs = [c for c in CONFIGS if c in args.configs]
-        for stage in (EAGER, tuple(c for c in configs if c not in EAGER)):
+        for stage in (FIRST, tuple(c for c in configs if c not in FIRST)):
             for batch in batches:
                 for config in [c for c in configs if c in stage]:
                     for rep in range(1, args.reps + 1):
@@ -247,7 +264,7 @@ def main():
     args = parser.parse_args()
 
     if args.preset == "quick":  # Twenty minutes, to check the machine before the long night.
-        args.configs = list(EAGER)
+        args.configs = list(FIRST)
         args.cpu_batches = args.cuda_batches = [32, 512]
         args.reps = 1
 
@@ -259,9 +276,15 @@ def main():
     print(f"{environ['gpu'] or 'no gpu'}, torch {environ['torch']}, "
           f"cuda {environ['cuda'] or 'none'}, python {environ['python']}")
     print(f"{len(runs)} runs to go, {len(done)} already in {args.output}")
+    if (os.name == "nt" and not shutil.which("cl")
+            and any(run[1] == "cpu" and run[0] not in FIRST for run in runs)):
+        print("warning: cl.exe is not on the path, so inductor cannot compile for the cpu and\n"
+              "         every compiled cpu run will fail. Start a x64 Native Tools Command\n"
+              "         Prompt for VS, or drop those runs with --configs cgenn rotorch.\n"
+              "         The cuda runs compile through triton and are unaffected.")
     if args.dry_run:
         for config, device, batch, rep in runs:
-            print(f"  {device:5s} {config:18s} batch {batch:5d} rep {rep}")
+            print(f"  {device:5s} {config:20s} batch {batch:5d} rep {rep}")
         return
 
     blocked = set()  # (config, device) that has already failed, at a smaller batch size.
