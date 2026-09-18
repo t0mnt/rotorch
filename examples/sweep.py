@@ -23,8 +23,9 @@ The whole thing is a few hours, most of it compiling: every batch size compiles 
 :code:`--configs` drops columns.
 
 The cgenn columns need its checkout on :code:`--cgenn-path`, plus pyyaml, scipy and
-scikit-learn, which are not rotorch's own dependencies. The triton columns need a gpu; there
-is no cpu triton, so they are skipped on :code:`--devices cpu`.
+scikit-learn, which are not rotorch's own dependencies. The triton columns need a gpu; on the
+cpu the flag does nothing and the run would only repeat the plain rotorch one, so they are
+left out of the plan.
 """
 import argparse
 import csv
@@ -72,8 +73,12 @@ FAILURES = [("out of memory", "out-of-memory"),
             # MSVC, which is only on the path inside a developer prompt. Triton carries the
             # cuda side, so this is a cpu-only failure.
             ("is not found", "no-cpp-compiler"),
+            # Inductor builds its cpu wrapper with /openmp, so the MSVC include path has to
+            # carry omp.h. A conda prompt has cl but not always the headers beside it.
+            ("Cannot open include file: 'omp.h'", "no-openmp-headers"),
             ("BackendCompilerFailed", "compile-failed"),
             ("InductorError", "compile-failed"),
+            ("InternalTorchDynamoError", "dynamo-failed"),
             ("Could not import the cgenn model", "cgenn-path"),
             ("ModuleNotFoundError", "import-error"),
             # A triton kernel that asks for more registers or shared memory than the card has.
@@ -162,12 +167,17 @@ def completed(path):
                 row["status"] for row in csv.DictReader(handle)}
 
 
+def skip(config, device):
+    """There is no cpu triton: the flag is ignored and the run is a second plain rotorch run."""
+    return device == "cpu" and "triton" in CONFIGS[config]
+
+
 def plan(args, has_cuda):
     """Cheap and informative first, then the ones that compile for minutes, by batch size."""
     devices = args.devices or (["cpu", "cuda"] if has_cuda else ["cpu"])
     for device in devices:
         batches = args.cpu_batches if device == "cpu" else args.cuda_batches
-        configs = [c for c in CONFIGS if c in args.configs]
+        configs = [c for c in CONFIGS if c in args.configs and not skip(c, device)]
         for stage in (FIRST, tuple(c for c in configs if c not in FIRST)):
             for batch in batches:
                 for config in [c for c in configs if c in stage]:
@@ -183,8 +193,8 @@ def table(best, oom, device, metric, title, ratio):
     which is how flash-clifford reports it.
     """
     batches = sorted({key[2] for key in best if key[0] == device})
-    configs = [c for c in CONFIGS
-               if any(key[:2] == (device, c) and metric in best[key] for key in best)]
+    configs = [c for c in CONFIGS if not skip(c, device)
+               and any(key[:2] == (device, c) and metric in best[key] for key in best)]
     if not configs:
         return
 
@@ -281,7 +291,10 @@ def main():
         print("warning: cl.exe is not on the path, so inductor cannot compile for the cpu and\n"
               "         every compiled cpu run will fail. Start a x64 Native Tools Command\n"
               "         Prompt for VS, or drop those runs with --configs cgenn rotorch.\n"
-              "         The cuda runs compile through triton and are unaffected.")
+              "         The cuda runs compile through triton and are unaffected.\n"
+              "         Finding cl is not enough on its own: inductor compiles with /openmp,\n"
+              "         so omp.h has to be on the include path as well, which a bare conda\n"
+              "         prompt does not arrange.")
     if args.dry_run:
         for config, device, batch, rep in runs:
             print(f"  {device:5s} {config:20s} batch {batch:5d} rep {rep}")
